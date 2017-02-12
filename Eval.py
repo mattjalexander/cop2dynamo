@@ -6,7 +6,7 @@ class EvalType(Enum):
     UNKNOWN = 3
 
     def __str__(self):
-        if self.NCOER:
+        if self == self.NCOER:
             return "NCOER"
         else:
             return "OER"
@@ -98,4 +98,10 @@ class Eval:
             return 0  # should mean it's the same instance
 
     def __repr__(self):
-        return self.name
+        return self.name + "(due on " + str(self.rating_due).partition(' ')[0] + ")\n"
+
+    def table(self):
+        return [self.name, self.rating_status, str(self.rating_due).partition(' ')[0], self.notes]
+
+    def simple_table(self):
+        return [self.name, self.rating_status]

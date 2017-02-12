@@ -8,9 +8,12 @@ import plotly.offline as offline
 from plotly.figure_factory import create_table
 import plotly.graph_objs as go
 
-def fix_rating_due(rating_period):
+def fix_rating_due(last_rating_end, rating_period):
+    #if last_rating_end != '':
+    #    return datetime.strptime(rating_period.strip()[-8:], "%Y%m%d") + timedelta(days = 365)
     if rating_period == '':
         return ''
+
     return datetime.strptime(rating_period.strip()[-8:], "%Y%m%d")
 
 def fix_rating_period(last_rating_end):
@@ -55,11 +58,15 @@ def fix_rating_status(mytime, rating_due, notes):
 def main():
 
     # source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\oers\20160828_oers.csv'
-    #source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\oers\20170210_oers.csv'
+    source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\oers\20170210_oers.csv'
     # source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\ncoers\20170106_ncoers.csv'
-    source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\ncoers\20170211_ncoers.csv'
+    #source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\ncoers\20170211_ncoers.csv'
     read_csv(source)
 
+def printme(x):
+    returnme = ''
+    for x in x:
+        returnme = returnme + str(x) + '\n'
 
 def read_csv(source):
 
@@ -137,7 +144,6 @@ def read_csv(source):
             #
             # Massage the data.
             # if you don't have a rating period, you can derive what it probably
-            #
             # is from LastRatingDue and assuming an annual
             if me.rating_period == '' and me.last_rating_end != '':
                 (me.rating_period, me.rating_type) = fix_rating_period(me.last_rating_end)
@@ -145,7 +151,7 @@ def read_csv(source):
             # similarly, we can derive the rating_end from the rating period if
             # we're not explicitly given it
             if me.rating_due == '' and me.rating_period != '':
-                me.rating_due = fix_rating_due(me.rating_period)
+                me.rating_due = fix_rating_due(me.last_rating_end, me.rating_period)
 
             me.rating_status = fix_rating_status(datetime.strptime(basename(source)[:8], "%Y%m%d"), me.rating_due, me.notes)
             total = total + 1
@@ -173,26 +179,46 @@ def read_csv(source):
 
     print("Total: " + str(total))
 
-    print("Submitted: " + str(submitted.__len__()) + ": " + str(submitted))
-    print("Delinquent: " + str(delinquent.__len__()) + ": " + str(delinquent))
-    print("Due: " + str(due.__len__()) + ": " + str(due))
-    print("Upcoming: " + str(upcoming.__len__()) + ": " + str(upcoming))
-    print("Current: " + str(current.__len__()) + ": " + str(current))
-    print("Unknown: " + str(unknown.__len__()) + ": " + str(unknown))
+    #print("Submitted: " + str(submitted.__len__()) + ": " + str(submitted))
+    #print("Delinquent: " + str(delinquent.__len__()) + ": " + str(delinquent))
+    #print("Due: " + str(due.__len__()) + ": " + str(due))
+    #print("Upcoming: " + str(upcoming.__len__()) + ": " + str(upcoming))
+    #print("Current: " + str(current.__len__()) + ": " + str(current))
+    #print("Unknown: " + str(unknown.__len__()) + ": " + str(unknown))
 
     # build by-name list over NCOERs that need action
-    by_name_matrix = [["Unit", "Delinquent", "Due", "Upcoming"]]
-    for unit in "PAPA0", "PAPB0", "PAPC0", "PAPT0", "QYTJ0":
-        print(unit)
-        print("-----")
-        print("     Submitted: " + str([x for x in submitted if x.upc == unit]))
-        print("     Delinquent: " + str([x for x in delinquent if x.upc == unit]))
-        print("     Due: " + str([x for x in due if x.upc == unit]))
-        print("     Upcoming: " + str([x for x in upcoming if x.upc == unit]))
-        print("     Current: " + str([x for x in current if x.upc == unit]))
-        print("     Unknown: " + str([x for x in unknown if x.upc == unit]))
+    for unit in "PAPA0", "PAPB0", "PAPC0", 'PAPT0', "QYTJ0":
+        # print("     Delinquent: " + str([x for x in delinquent if x.upc == unit]))
+        # print("     Due: " + str([x for x in due if x.upc == unit]))
+        # print("     Upcoming: " + str([x for x in upcoming if x.upc == unit]))
+        # print("     Current: " + str([x for x in current if x.upc == unit]))
+        # print("     Unknown: " + str([x for x in unknown if x.upc == unit]))
 
-    # build stats table
+        table = ([x.simple_table() for x in submitted if x.upc == unit] +
+                 [x.simple_table() for x in delinquent if x.upc == unit] +
+                 [x.simple_table() for x in due if x.upc == unit] +
+                 [x.simple_table() for x in upcoming if x.upc == unit] +
+                 [x.simple_table() for x in unknown if x.upc == unit] +
+                 [x.simple_table() for x in current if x.upc == unit]
+                 )
+
+        if table:
+            table.insert(0, ["Name", "Status"])
+            figure2 = create_table(table)
+        figure2.layout.margin.update({'t': 75, 'l': 50})  # make room for the title
+        figure2.layout.update({'title': unit + " " + basename(source)[:8] + " " + str(type) + " By Name List"})
+        offline.plot(figure2, filename=unit + '.html',
+                     #image_filename=unit + '.png',
+                     image='png')
+
+        #print("     Submitted: " + str([x for x in submitted if x.upc == unit]))
+        #print("     Delinquent: " + str([x for x in delinquent if x.upc == unit]))
+        #print("     Due: " + str([x for x in due if x.upc == unit]))
+        #print("     Upcoming: " + str([x for x in upcoming if x.upc == unit]))
+        #print("     Current: " + str([x for x in current if x.upc == unit]))
+        #print("     Unknown: " + str([x for x in unknown if x.upc == unit]))
+
+    # build statistics table
     # seems pretty absurdly inefficient, i'm filtering the same 7 lists 5 different times
     data_matrix = [['Unit','Submitted', 'Delinquent', 'Due', 'Upcoming', 'Current', 'Unknown'],
                    ['A Co', [x for x in submitted if x.upc == 'PAPA0'].__len__(),
@@ -254,7 +280,7 @@ def read_csv(source):
     figure.layout.margin.update({'t': 75, 'l': 50}) # make room for the title
     figure.layout.update({'title': basename(source)[:8] + " " + str(type) + " Snapshot"})
     figure.layout.update({'height': 350})
-    offline.plot(figure)
+    offline.plot(figure, filename='snapshot.html', image_filename='snapshot.png', image='png')
 
 if __name__ == "__main__":
     main()
