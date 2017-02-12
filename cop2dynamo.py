@@ -1,42 +1,12 @@
-from enum import Enum
 import csv
 import sys
 from datetime import datetime, timedelta
 
-class EvalType(Enum):
-    OER = 1
-    NCOER = 2
-    UNKNOWN = 3
-
-# Maps to the expected column in the csv
-class OerFields(Enum):
-    UPC = 0
-    NAME = 1
-    GRADE = 2
-    LAST_RATING_END = 3
-    RATING_DUE = 4
-    RATING_STATUS = 5
-    RATING_PERIOD = 6
-    RATING_TYPE = 7
-    RATER = 8
-    INT_RATER = 9
-    SR_RATER = 10
-    NOTES = 11
-
-class NcoerFields(Enum):
-    UPC = 0
-    NAME = 1
-    GRADE = 2
-    LAST_RATING_END = 3
-    RATING_STATUS = 4
-    LEGACY_NCOER = 5
-    RATING_PERIOD = 6
-    RATING_TYPE = 7
-    RATER = 8
-    SR_RATER = 9
-    REVIEWER = 10
-    NOTES = 11
-    LEGACY_NOTES = 12
+import Eval
+from os.path import basename
+import plotly.offline as offline
+from plotly.figure_factory import create_table
+import plotly.graph_objs as go
 
 def fix_rating_due(rating_period):
     if rating_period == '':
@@ -59,11 +29,15 @@ def fix_rating_period(last_rating_end):
 #   Delinquent (31+ days overdue),
 #   Submitted if Notes has the word submitted in it
 def fix_rating_status(mytime, rating_due, notes):
-    if "submitted" in notes.lower() or "sent to hqda" in notes.lower():
+    if "submitted to hqda" in notes.lower() or \
+       "sent to hqda" in notes.lower() or \
+       "hqda level" in notes.lower() or \
+       "accepted by iperms" in notes.lower() or \
+       "iperms accepted" in notes.lower():
         rating_status = "Submitted"
     elif rating_due == '':  # this is mostly to short-circuit.
                             # we default to Unknown anyways
-        rating_status = "Unknown, no RatingDue"
+        rating_status = "Unknown"
     elif ((rating_due - mytime) > timedelta(days=60)):
         rating_status = "Current"
     elif ((rating_due - mytime) > timedelta(days=1)):
@@ -79,15 +53,30 @@ def fix_rating_status(mytime, rating_due, notes):
 
 
 def main():
+
     # source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\oers\20160828_oers.csv'
-    source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\ncoers\20170106_ncoers.csv'
+    #source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\oers\20170210_oers.csv'
+    # source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\ncoers\20170106_ncoers.csv'
+    source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\ncoers\20170211_ncoers.csv'
+    read_csv(source)
+
+
+def read_csv(source):
 
     # initialize dynamo connnection
     # dynamodb = boto3.resource('dynamodb')
     # table = dynamodb.Table('SMs')
 
+    total = 0
+    unknown = list()
+    delinquent = list()
+    current = list()
+    upcoming = list()
+    due = list()
+    submitted = list()
+    type = Eval.EvalType.UNKNOWN
+
     with open(source, newline='') as csvfile:
-        type = EvalType.UNKNOWN
         for row in csv.reader(csvfile, delimiter=','):
             #
             # Basic initialization, mainly figuring out what type of eval report we have.
@@ -96,66 +85,50 @@ def main():
             if row[0].strip() == 'UPC':
                 # id if this is an oer or ncoer
                 if row[10].strip() == 'Reviewer':
-                    type = EvalType.NCOER
+                    type = Eval.EvalType.NCOER
                 if row[4].strip() == 'RatingDue':
-                    type = EvalType.OER
+                    type = Eval.EvalType.OER
                 print("Dealing with a " + str(type))
                 continue
 
             #
             # Now we'll read from the CSV and populate our internal understanding of the world.
             #
-
-            # initialize
-            upc = ''
-            name = ''
-            grade = ''
-            last_rating_end = ''
-            rating_due = ''
-            rating_status = ''
-            rating_period = ''
-            rating_type = ''
-            rater = ''
-            int_rater = ''
-            sr_rater = ''
-            reviewer = ''
-            notes = ''
-            legacy_notes = ''
-
-            if type == EvalType.OER:
-                # i should probably make an SM object. meh.
-                upc = row[OerFields.UPC.value]
-                name = row[OerFields.NAME.value]
-                grade = row[OerFields.GRADE.value]
-                last_rating_end = datetime.strptime(row[OerFields.LAST_RATING_END.value], "%m/%d/%Y")
-                rating_due = datetime.strptime(row[OerFields.RATING_DUE.value], "%m/%d/%Y")
-                rating_status = row[OerFields.RATING_STATUS.value]
-                rating_period = row[OerFields.RATING_PERIOD.value]
-                rating_type = row[OerFields.RATING_TYPE.value]
-                rater = row[OerFields.RATER.value]
-                int_rater = row[OerFields.INT_RATER.value]
-                sr_rater = row[OerFields.SR_RATER.value]
-                notes = row[OerFields.NOTES.value]
-            elif type == EvalType.NCOER:
-                upc = row[NcoerFields.UPC.value]
-                name = row[NcoerFields.NAME.value]
-                grade = row[NcoerFields.GRADE.value]
+            me = Eval.Eval()
+            me.type = type
+            if type == Eval.EvalType.OER:
+                me.upc = row[Eval.OerFields.UPC.value]
+                me.name = row[Eval.OerFields.NAME.value]
+                me.grade = row[Eval.OerFields.GRADE.value]
+                me.last_rating_end = datetime.strptime(row[Eval.OerFields.LAST_RATING_END.value], "%m/%d/%Y")
+                me.rating_due = datetime.strptime(row[Eval.OerFields.RATING_DUE.value], "%m/%d/%Y")
+                me.rating_status = row[Eval.OerFields.RATING_STATUS.value]
+                me.rating_period = row[Eval.OerFields.RATING_PERIOD.value]
+                me.rating_type = row[Eval.OerFields.RATING_TYPE.value]
+                me.rater = row[Eval.OerFields.RATER.value]
+                me.int_rater = row[Eval.OerFields.INT_RATER.value]
+                me.sr_rater = row[Eval.OerFields.SR_RATER.value]
+                me.notes = row[Eval.OerFields.NOTES.value]
+            elif type == Eval.EvalType.NCOER:
+                me.upc = row[Eval.NcoerFields.UPC.value]
+                me.name = row[Eval.NcoerFields.NAME.value]
+                me.grade = row[Eval.NcoerFields.GRADE.value]
                 try:
-                    last_rating_end = datetime.strptime(row[NcoerFields.LAST_RATING_END.value], "%m/%d/%Y")
+                    me.last_rating_end = datetime.strptime(row[Eval.NcoerFields.LAST_RATING_END.value], "%m/%d/%Y")
                 except ValueError:
                     pass
                 # parse rating_due from rating_period
-                legacy_ncoer = row[NcoerFields.LEGACY_NCOER.value]
-                rating_status = row[NcoerFields.RATING_STATUS.value]
-                rating_period = row[NcoerFields.RATING_PERIOD.value]
-                rating_type = row[NcoerFields.RATING_TYPE.value]
-                rater = row[NcoerFields.RATER.value]
+                me.legacy_ncoer = row[Eval.NcoerFields.LEGACY_NCOER.value]
+                me.rating_status = row[Eval.NcoerFields.RATING_STATUS.value]
+                me.rating_period = row[Eval.NcoerFields.RATING_PERIOD.value]
+                me.rating_type = row[Eval.NcoerFields.RATING_TYPE.value]
+                me.rater = row[Eval.NcoerFields.RATER.value]
                 # no int_rater for ncoers
-                sr_rater = row[NcoerFields.SR_RATER.value]
-                reviewer = row[NcoerFields.REVIEWER.value]
-                notes = row[NcoerFields.NOTES.value]
+                me.sr_rater = row[Eval.NcoerFields.SR_RATER.value]
+                me.reviewer = row[Eval.NcoerFields.REVIEWER.value]
+                me.notes = row[Eval.NcoerFields.NOTES.value]
                 try:
-                    legacy_notes = row[NcoerFields.LEGACY_NOTES.value]
+                    me.notes = me.notes + row[Eval.NcoerFields.LEGACY_NOTES.value]
                 except IndexError:
                     pass
             else:
@@ -166,29 +139,122 @@ def main():
             # if you don't have a rating period, you can derive what it probably
             #
             # is from LastRatingDue and assuming an annual
-            if rating_period == '' and last_rating_end != '':
-                (rating_period, rating_type) = fix_rating_period(last_rating_end)
+            if me.rating_period == '' and me.last_rating_end != '':
+                (me.rating_period, me.rating_type) = fix_rating_period(me.last_rating_end)
 
             # similarly, we can derive the rating_end from the rating period if
             # we're not explicitly given it
-            if rating_due == '' and rating_period != '':
-                rating_due = fix_rating_due(rating_period)
+            if me.rating_due == '' and me.rating_period != '':
+                me.rating_due = fix_rating_due(me.rating_period)
 
-            rating_status = fix_rating_status(datetime.now(), rating_due, notes)
+            me.rating_status = fix_rating_status(datetime.strptime(basename(source)[:8], "%Y%m%d"), me.rating_due, me.notes)
+            total = total + 1
 
             #
-            # Do something with these random variables.
+            # Update statistics
             #
-            print(grade + " " + name + "(" + upc + ")'s last rating ended " + str(last_rating_end))
-            print("The " + rating_type + " eval is due on " + str(rating_due) + " for " + rating_period + ".")
-            print("It's " + str(rating_status))# + " with " + str(rating_due - datetime.now()) + " days left.")
-            if type == EvalType.OER:
-                print(rater + ", " + int_rater + ", and " + sr_rater + " are on the hook.")
-            else:
-                print(rater + ", " + sr_rater + ", and " + reviewer + " are on the hook.")
-            print(notes + " " + legacy_notes)
+            if me.rating_status == "Delinquent":
+                delinquent.append(me)
 
-            print("---------")
+            if "Unknown" in me.rating_status:
+                unknown.append(me)
+
+            if me.rating_status == "Current":
+                current.append(me)
+
+            if me.rating_status == "Upcoming":
+                upcoming.append(me)
+
+            if me.rating_status == "Due":
+                due.append(me)
+
+            if me.rating_status == "Submitted":
+                submitted.append(me)
+
+    print("Total: " + str(total))
+
+    print("Submitted: " + str(submitted.__len__()) + ": " + str(submitted))
+    print("Delinquent: " + str(delinquent.__len__()) + ": " + str(delinquent))
+    print("Due: " + str(due.__len__()) + ": " + str(due))
+    print("Upcoming: " + str(upcoming.__len__()) + ": " + str(upcoming))
+    print("Current: " + str(current.__len__()) + ": " + str(current))
+    print("Unknown: " + str(unknown.__len__()) + ": " + str(unknown))
+
+    # build by-name list over NCOERs that need action
+    by_name_matrix = [["Unit", "Delinquent", "Due", "Upcoming"]]
+    for unit in "PAPA0", "PAPB0", "PAPC0", "PAPT0", "QYTJ0":
+        print(unit)
+        print("-----")
+        print("     Submitted: " + str([x for x in submitted if x.upc == unit]))
+        print("     Delinquent: " + str([x for x in delinquent if x.upc == unit]))
+        print("     Due: " + str([x for x in due if x.upc == unit]))
+        print("     Upcoming: " + str([x for x in upcoming if x.upc == unit]))
+        print("     Current: " + str([x for x in current if x.upc == unit]))
+        print("     Unknown: " + str([x for x in unknown if x.upc == unit]))
+
+    # build stats table
+    # seems pretty absurdly inefficient, i'm filtering the same 7 lists 5 different times
+    data_matrix = [['Unit','Submitted', 'Delinquent', 'Due', 'Upcoming', 'Current', 'Unknown'],
+                   ['A Co', [x for x in submitted if x.upc == 'PAPA0'].__len__(),
+                            [x for x in delinquent if x.upc == 'PAPA0'].__len__(),
+                            [x for x in due if x.upc == 'PAPA0'].__len__(),
+                            [x for x in upcoming if x.upc == 'PAPA0'].__len__(),
+                            [x for x in current if x.upc == 'PAPA0'].__len__(),
+                            [x for x in unknown if x.upc == 'PAPA0'].__len__()],
+                   ['B Co', [x for x in submitted if x.upc == 'PAPB0'].__len__(),
+                    [x for x in delinquent if x.upc == 'PAPB0'].__len__(),
+                    [x for x in due if x.upc == 'PAPB0'].__len__(),
+                    [x for x in upcoming if x.upc == 'PAPB0'].__len__(),
+                    [x for x in current if x.upc == 'PAPB0'].__len__(),
+                    [x for x in unknown if x.upc == 'PAPB0'].__len__()],
+                   ['C Co', [x for x in submitted if x.upc == 'PAPC0'].__len__(),
+                    [x for x in delinquent if x.upc == 'PAPC0'].__len__(),
+                    [x for x in due if x.upc == 'PAPC0'].__len__(),
+                    [x for x in upcoming if x.upc == 'PAPC0'].__len__(),
+                    [x for x in current if x.upc == 'PAPC0'].__len__(),
+                    [x for x in unknown if x.upc == 'PAPC0'].__len__()],
+                   ['HHC', [x for x in submitted if x.upc == 'PAPT0'].__len__(),
+                    [x for x in delinquent if x.upc == 'PAPT0'].__len__(),
+                    [x for x in due if x.upc == 'PAPT0'].__len__(),
+                    [x for x in upcoming if x.upc == 'PAPT0'].__len__(),
+                    [x for x in current if x.upc == 'PAPT0'].__len__(),
+                    [x for x in unknown if x.upc == 'PAPT0'].__len__()],
+                   ['I Co', [x for x in submitted if x.upc == 'QYTJ0'].__len__(),
+                    [x for x in delinquent if x.upc == 'QYTJ0'].__len__(),
+                    [x for x in due if x.upc == 'QYTJ0'].__len__(),
+                    [x for x in upcoming if x.upc == 'QYTJ0'].__len__(),
+                    [x for x in current if x.upc == 'QYTJ0'].__len__(),
+                    [x for x in unknown if x.upc == 'QYTJ0'].__len__()],
+                   ['TOTAL', submitted.__len__(),
+                             delinquent.__len__(),
+                             due.__len__(),
+                             upcoming.__len__(),
+                             current.__len__(),
+                             unknown.__len__()]]
+
+    trace = go.Pie(labels=["Submitted", "Delinquent", "Due", "Upcoming", "Current", "Unknown"],
+                   values=[submitted.__len__(), delinquent.__len__(), due.__len__(),
+                           upcoming.__len__(), current.__len__(), unknown.__len__()],
+                   marker={'colors': ['blue',  # submitted
+                                    'black', # delinquent
+                                    'red',   # due
+                                    'yellow', # upcoming
+                                    'green', # current
+                                    'grey']}, # unknown
+                   domain= {'x': [.6, 1],
+                            'y': [0, 1]},
+                   hoverinfo='label+percent',
+                   showlegend=False,
+                   textinfo='label+percent',
+                   name='Evals')
+
+    figure = create_table(data_matrix)
+    figure['data'].extend(go.Data([trace]))
+    figure.layout.xaxis.update({'domain': [0, .7]})
+    figure.layout.margin.update({'t': 75, 'l': 50}) # make room for the title
+    figure.layout.update({'title': basename(source)[:8] + " " + str(type) + " Snapshot"})
+    figure.layout.update({'height': 350})
+    offline.plot(figure)
 
 if __name__ == "__main__":
     main()
