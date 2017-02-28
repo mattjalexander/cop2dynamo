@@ -33,6 +33,9 @@ def fix_rating_period(last_rating_end):
 #   Submitted if Notes has the word submitted in it
 def fix_rating_status(mytime, rating_due, notes):
     if "submitted to hqda" in notes.lower() or \
+       "hqda submitted" in notes.lower() or \
+       "hqdq submitted" in notes.lower() or \
+       "hqda submittrd" in notes.lower() or \
        "sent to hqda" in notes.lower() or \
        "hqda level" in notes.lower() or \
        "accepted by iperms" in notes.lower() or \
@@ -58,9 +61,13 @@ def fix_rating_status(mytime, rating_due, notes):
 def main():
 
     # source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\oers\20160828_oers.csv'
-    source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\oers\20170210_oers.csv'
+    #source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\oers\20170210_oers.csv'
     # source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\ncoers\20170106_ncoers.csv'
     #source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\ncoers\20170211_ncoers.csv'
+
+    #source = r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals/ncoers/20170211_ncoers.csv'
+    source = r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals/ncoers/20170228_ncoers.csv'
+    #source = r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals/oers/20170228_oers.csv'
     read_csv(source)
 
 def printme(x):
@@ -93,8 +100,10 @@ def read_csv(source):
                 # id if this is an oer or ncoer
                 if row[10].strip() == 'Reviewer':
                     type = Eval.EvalType.NCOER
-                if row[4].strip() == 'RatingDue':
+                elif row[4].strip() == 'RatingDue':
                     type = Eval.EvalType.OER
+                else:
+                    print("Am I taking crazy pills?")
                 print("Dealing with a " + str(type))
                 continue
 
@@ -107,8 +116,8 @@ def read_csv(source):
                 me.upc = row[Eval.OerFields.UPC.value]
                 me.name = row[Eval.OerFields.NAME.value]
                 me.grade = row[Eval.OerFields.GRADE.value]
-                me.last_rating_end = datetime.strptime(row[Eval.OerFields.LAST_RATING_END.value], "%m/%d/%Y")
-                me.rating_due = datetime.strptime(row[Eval.OerFields.RATING_DUE.value], "%m/%d/%Y")
+                me.last_rating_end = datetime.strptime(row[Eval.OerFields.LAST_RATING_END.value], "%m/%d/%y")
+                me.rating_due = datetime.strptime(row[Eval.OerFields.RATING_DUE.value], "%m/%d/%y")
                 me.rating_status = row[Eval.OerFields.RATING_STATUS.value]
                 me.rating_period = row[Eval.OerFields.RATING_PERIOD.value]
                 me.rating_type = row[Eval.OerFields.RATING_TYPE.value]
@@ -117,6 +126,7 @@ def read_csv(source):
                 me.sr_rater = row[Eval.OerFields.SR_RATER.value]
                 me.notes = row[Eval.OerFields.NOTES.value]
             elif type == Eval.EvalType.NCOER:
+                me.type = type
                 me.upc = row[Eval.NcoerFields.UPC.value]
                 me.name = row[Eval.NcoerFields.NAME.value]
                 me.grade = row[Eval.NcoerFields.GRADE.value]
@@ -194,22 +204,33 @@ def read_csv(source):
         # print("     Current: " + str([x for x in current if x.upc == unit]))
         # print("     Unknown: " + str([x for x in unknown if x.upc == unit]))
 
-        table = ([x.simple_table() for x in submitted if x.upc == unit] +
-                 [x.simple_table() for x in delinquent if x.upc == unit] +
-                 [x.simple_table() for x in due if x.upc == unit] +
-                 [x.simple_table() for x in upcoming if x.upc == unit] +
-                 [x.simple_table() for x in unknown if x.upc == unit] +
-                 [x.simple_table() for x in current if x.upc == unit]
+        table = (#[x.table() for x in submitted if x.upc == unit] +
+                 [x.table() for x in delinquent if x.upc == unit] +
+                 [x.table() for x in due if x.upc == unit] +
+                 [x.table() for x in upcoming if x.upc == unit] +
+                 [x.table() for x in unknown if x.upc == unit]
+                 #[x.table() for x in current if x.upc == unit]
                  )
 
-        if table:
-            table.insert(0, ["Name", "Status"])
-            figure2 = create_table(table)
-        figure2.layout.margin.update({'t': 75, 'l': 50})  # make room for the title
-        figure2.layout.update({'title': unit + " " + basename(source)[:8] + " " + str(type) + " By Name List"})
-        offline.plot(figure2, filename=unit + '.html',
-                     #image_filename=unit + '.png',
-                     image='png')
+        # plotly prints tables like hot garbage. print it, then copy into excel.
+        base=r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals'
+        #with open(base + '/' + unit + '_' + str(me.type) +'.csv', 'w', newline='') as csvfile:
+        with open(base + '/' + '20170228_' + unit + '.csv', 'a', newline='') as csvfile:
+            spamwriter = csv.writer(csvfile, delimiter=',')
+            for row in table:
+                spamwriter.writerow(row)
+
+        #if table:
+        #    table.insert(0, ["Name", "Status", "Due", "Notes"])
+        #    figure2 = create_table(table)
+        #figure2.layout.width = 1500  # width in pixels
+        #figure2.layout.margin.update({'t': 75, 'l': 50})  # make room for the title
+        #figure2.layout.update({'title': unit + " " + basename(source)[:8] + " " + str(type) + " By Name List"})
+        #for i in range(len(figure2.layout.annotations)):
+        #    figure2.layout.annotations[i].font.size = 8
+        #offline.plot(figure2, filename=unit + '.html',
+        #             #image_filename=unit + '.png',
+        #             image='png')
 
         #print("     Submitted: " + str([x for x in submitted if x.upc == unit]))
         #print("     Delinquent: " + str([x for x in delinquent if x.upc == unit]))

@@ -101,7 +101,7 @@ class Eval:
         return self.name + "(due on " + str(self.rating_due).partition(' ')[0] + ")\n"
 
     def table(self):
-        return [self.name, self.rating_status, str(self.rating_due).partition(' ')[0], self.notes]
+        return [self.upc, self.grade, self.name, self.rating_status, str(self.rating_due).partition(' ')[0], self.notes]
 
     def simple_table(self):
         return [self.name, self.rating_status]
