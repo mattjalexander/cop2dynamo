@@ -9,18 +9,15 @@ from plotly.figure_factory import create_table
 import plotly.graph_objs as go
 
 def fix_rating_due(last_rating_end, rating_period):
-    #if last_rating_end != '':
-    #    return datetime.strptime(rating_period.strip()[-8:], "%Y%m%d") + timedelta(days = 365)
-    if rating_period == '':
-        return ''
-
-    return datetime.strptime(rating_period.strip()[-8:], "%Y%m%d")
+    rating_due = ''
+    if last_rating_end != '':
+        rating_due = last_rating_end + timedelta(days=365)
+    return rating_due
 
 def fix_rating_period(last_rating_end):
-    if last_rating_end != '':
-        begin = last_rating_end + timedelta(days = 1)
-        end = begin + timedelta(days = 365)
-        return (begin.strftime("%Y%m%d") + "-" + end.strftime("%Y%m%d"), "ANNUAL")
+    begin = last_rating_end + timedelta(days = 1)
+    end = begin + timedelta(days = 365)
+    return (begin.strftime("%Y%m%d") + "-" + end.strftime("%Y%m%d"), "ANNUAL")
 
 # We do read this in, but we also don't trust it. It only says "Current, Due, or Delinquent.", and
 # is often incorrect
@@ -66,8 +63,13 @@ def main():
     #source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\ncoers\20170211_ncoers.csv'
 
     #source = r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals/ncoers/20170211_ncoers.csv'
-    source = r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals/ncoers/20170228_ncoers.csv'
+    #source = r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals/ncoers/20170228_ncoers.csv'
     #source = r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals/oers/20170228_oers.csv'
+
+    #source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\ncoers\20170228_ncoers.csv'
+    #source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\ncoers\20170308_ncoers.csv'
+    source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\oers\20170308_oers.csv'
+
     read_csv(source)
 
 def printme(x):
@@ -116,8 +118,14 @@ def read_csv(source):
                 me.upc = row[Eval.OerFields.UPC.value]
                 me.name = row[Eval.OerFields.NAME.value]
                 me.grade = row[Eval.OerFields.GRADE.value]
-                me.last_rating_end = datetime.strptime(row[Eval.OerFields.LAST_RATING_END.value], "%m/%d/%y")
-                me.rating_due = datetime.strptime(row[Eval.OerFields.RATING_DUE.value], "%m/%d/%y")
+                try:
+                    me.last_rating_end = datetime.strptime(row[Eval.OerFields.LAST_RATING_END.value], "%m/%d/%y")
+                except ValueError:
+                    me.last_rating_end = datetime.strptime(row[Eval.OerFields.LAST_RATING_END.value], "%m/%d/%Y")
+                try:
+                    me.rating_due = datetime.strptime(row[Eval.OerFields.RATING_DUE.value], "%m/%d/%y")
+                except ValueError:
+                    me.rating_due = datetime.strptime(row[Eval.OerFields.RATING_DUE.value], "%m/%d/%Y")
                 me.rating_status = row[Eval.OerFields.RATING_STATUS.value]
                 me.rating_period = row[Eval.OerFields.RATING_PERIOD.value]
                 me.rating_type = row[Eval.OerFields.RATING_TYPE.value]
@@ -131,9 +139,12 @@ def read_csv(source):
                 me.name = row[Eval.NcoerFields.NAME.value]
                 me.grade = row[Eval.NcoerFields.GRADE.value]
                 try:
-                    me.last_rating_end = datetime.strptime(row[Eval.NcoerFields.LAST_RATING_END.value], "%m/%d/%Y")
+                    me.last_rating_end = datetime.strptime(row[Eval.NcoerFields.LAST_RATING_END.value], "%m/%d/%y")
                 except ValueError:
-                    pass
+                    try:
+                        me.last_rating_end = datetime.strptime(row[Eval.NcoerFields.LAST_RATING_END.value], "%m/%d/%Y")
+                    except ValueError:
+                        pass
                 # parse rating_due from rating_period
                 me.legacy_ncoer = row[Eval.NcoerFields.LEGACY_NCOER.value]
                 me.rating_status = row[Eval.NcoerFields.RATING_STATUS.value]
@@ -160,7 +171,7 @@ def read_csv(source):
 
             # similarly, we can derive the rating_end from the rating period if
             # we're not explicitly given it
-            if me.rating_due == '' and me.rating_period != '':
+            if me.rating_period != '':
                 me.rating_due = fix_rating_due(me.last_rating_end, me.rating_period)
 
             me.rating_status = fix_rating_status(datetime.strptime(basename(source)[:8], "%Y%m%d"), me.rating_due, me.notes)
@@ -204,16 +215,17 @@ def read_csv(source):
         # print("     Current: " + str([x for x in current if x.upc == unit]))
         # print("     Unknown: " + str([x for x in unknown if x.upc == unit]))
 
-        table = (#[x.table() for x in submitted if x.upc == unit] +
+        table = ([x.table() for x in submitted if x.upc == unit] +
                  [x.table() for x in delinquent if x.upc == unit] +
                  [x.table() for x in due if x.upc == unit] +
                  [x.table() for x in upcoming if x.upc == unit] +
-                 [x.table() for x in unknown if x.upc == unit]
-                 #[x.table() for x in current if x.upc == unit]
+                 [x.table() for x in unknown if x.upc == unit] +
+                 [x.table() for x in current if x.upc == unit]
                  )
 
         # plotly prints tables like hot garbage. print it, then copy into excel.
-        base=r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals'
+        #base=r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals'
+        base = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals'
         #with open(base + '/' + unit + '_' + str(me.type) +'.csv', 'w', newline='') as csvfile:
         with open(base + '/' + '20170228_' + unit + '.csv', 'a', newline='') as csvfile:
             spamwriter = csv.writer(csvfile, delimiter=',')
