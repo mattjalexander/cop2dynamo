@@ -29,20 +29,24 @@ def fix_rating_period(last_rating_end):
 #   Delinquent (31+ days overdue),
 #   Submitted if Notes has the word submitted in it
 def fix_rating_status(mytime, rating_due, notes):
-    if "submitted to hqda" in notes.lower() or \
+    if rating_due == '':  # this is mostly to short-circuit.
+                            # we default to Unknown anyways
+        rating_status = "Unknown"
+    elif ((rating_due - mytime) > timedelta(days=60)):
+        rating_status = "Current"
+    elif "submitted to hqda" in notes.lower() or \
        "hqda submitted" in notes.lower() or \
        "hqdq submitted" in notes.lower() or \
        "hqda submittrd" in notes.lower() or \
        "sent to hqda" in notes.lower() or \
        "hqda level" in notes.lower() or \
        "accepted by iperms" in notes.lower() or \
+       "packet at ngb" in notes.lower() or \
+       "sidpers updated" in notes.lower() or \
+       "pending sidpers update" in notes.lower() or \
        "iperms accepted" in notes.lower():
         rating_status = "Submitted"
-    elif rating_due == '':  # this is mostly to short-circuit.
-                            # we default to Unknown anyways
-        rating_status = "Unknown"
-    elif ((rating_due - mytime) > timedelta(days=60)):
-        rating_status = "Current"
+
     elif ((rating_due - mytime) > timedelta(days=1)):
         rating_status = "Upcoming"
     elif ((rating_due - mytime) > timedelta(days=-29)):
@@ -64,11 +68,14 @@ def main():
 
     #source = r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals/ncoers/20170211_ncoers.csv'
     #source = r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals/ncoers/20170228_ncoers.csv'
-    #source = r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals/oers/20170228_oers.csv'
+
 
     #source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\ncoers\20170228_ncoers.csv'
     #source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\ncoers\20170308_ncoers.csv'
-    source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\oers\20170308_oers.csv'
+    #source = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals\oers\20170316_oers.csv'
+
+    #source = r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals/oers/20170316_oers.csv'
+    source = r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals/ncoers/20170316_ncoers.csv'
 
     read_csv(source)
 
@@ -224,8 +231,8 @@ def read_csv(source):
                  )
 
         # plotly prints tables like hot garbage. print it, then copy into excel.
-        #base=r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals'
-        base = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals'
+        base=r'/Users/mattalex/SpiderOak Hive/3-161/S1/evals'
+        #base = r'C:\Users\Matt\Documents\SpiderOak Hive\3-161\S1\evals'
         #with open(base + '/' + unit + '_' + str(me.type) +'.csv', 'w', newline='') as csvfile:
         with open(base + '/' + '20170228_' + unit + '.csv', 'a', newline='') as csvfile:
             spamwriter = csv.writer(csvfile, delimiter=',')
@@ -309,6 +316,9 @@ def read_csv(source):
 
     figure = create_table(data_matrix)
     figure['data'].extend(go.Data([trace]))
+    autosize=False
+    figure.layout.width=1500
+    figure.layout.height=400
     figure.layout.xaxis.update({'domain': [0, .7]})
     figure.layout.margin.update({'t': 75, 'l': 50}) # make room for the title
     figure.layout.update({'title': basename(source)[:8] + " " + str(type) + " Snapshot"})
